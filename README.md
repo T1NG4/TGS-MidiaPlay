@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MidiaPlay
 
-## Getting Started
+Catálogo privado de vídeos para telões no VRChat. Você envia o arquivo; o painel gera uma URL HTTPS de MP4 que o AVPro consegue reproduzir.
 
-First, run the development server:
+O site roda na [Vercel](https://vercel.com). Os arquivos ficam no [Supabase Storage](https://supabase.com). Não use a Vercel para hospedar o filme — o limite de upload serverless é pequeno demais.
+
+## O que o VRChat aceita
+
+- URL **direta** para o arquivo (termina em `.mp4`), em **HTTPS**
+- Codec **H.264** + áudio **AAC** (Quest é mais rígido; evite HEVC/AV1)
+- Servidor com **HTTP Range** (o Storage já oferece)
+
+Páginas do Google Drive, MixDrop e hosts parecidos **não** são arquivos de vídeo. Este projeto não baixa nem faz proxy desses links.
+
+Se o arquivo não tocar no Quest, converta localmente:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+ffmpeg -i entrada.mkv -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart saida.mp4
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Subir a sua instância
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. Supabase
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Crie um projeto.
+2. SQL Editor: cole e execute [`supabase/migrations/20241013120000_videos.sql`](supabase/migrations/20241013120000_videos.sql).
+3. Authentication → Users → adicione o e-mail/senha do painel (desative o cadastro público se quiser só convite).
+4. Storage → o bucket `videos` já nasce **público** (leitura pela URL, listagem da API restrita). Nomes são UUID: só quem tem o link abre.
+5. Storage → Configuration: aumente o tamanho máximo do arquivo se precisar. A migration define até 20 GB por objeto; o plano do projeto também precisa comportar isso.
+6. CORS do Storage: permita a origem do site (`http://localhost:3000` e o domínio da Vercel) para o upload retomável (TUS) funcionar no browser.
 
-## Learn More
+### 2. Variáveis
 
-To learn more about Next.js, take a look at the following resources:
+Copie `.env.example` para `.env.local`:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variável | Função |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | URL do projeto |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chave `anon` (pública) |
+| `NEXT_PUBLIC_SITE_URL` | URL do site (para copiar a página de teste) |
+| `NEXT_PUBLIC_MAX_STORAGE_BYTES` | Teto da barra de disco (padrão 50 GB) |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Não coloque a `service_role` no frontend.
 
-## Deploy on Vercel
+### 3. Local
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm install
+npm run dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Abra `/login`, entre com o usuário criado no Supabase, envie um MP4 e copie **URL VRChat**.
+
+### 4. Vercel
+
+1. Importe o repositório.
+2. Configure as mesmas variáveis.
+3. Deploy. O painel fica em `/painel`.
+
+Cada pessoa que clonar o projeto usa **o próprio** projeto Supabase (auth, banco e gigabytes).
+
+## Uso no mundo
+
+1. Envie o MP4 no painel.
+2. Copie **URL VRChat** (link `.../storage/v1/object/public/videos/...`).
+3. Cole no player do mundo (ProTV, Udon, etc.).
+4. A página `/v/[id]` é só para testar no navegador. O telão precisa da URL crua, não da página HTML.
+
+O player do VRChat **não envia cookie de login**. Por isso o arquivo precisa ser acessível pela URL.
+
+## Licença de conteúdo
+
+Hospede apenas material que você tem direito de usar. MidiaPlay é a ferramenta de hospedagem, não um agregador de filmes de terceiros.
